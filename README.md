@@ -28,7 +28,7 @@ Without T5Gemma, labels and multi-fact captions continue to work using Qwen and 
 
 ## Development
 
-Requirements: Node.js 22.12+, Python 3.11+, and an authenticated Codex CLI only when testing chat.
+Requirements: Node.js 22.12+, Python 3.12+, and an authenticated Codex CLI only when testing chat.
 
 ```sh
 python -m venv .venv

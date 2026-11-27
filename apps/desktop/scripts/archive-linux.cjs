@@ -8,9 +8,10 @@ if (process.platform !== 'linux') {
 }
 
 const desktopRoot = path.resolve(__dirname, '..');
+const { version } = require(path.join(desktopRoot, 'package.json'));
 const distDirectory = path.join(desktopRoot, 'dist');
 const unpackedDirectory = path.join(distDirectory, 'linux-unpacked');
-const output = path.join(distDirectory, 'arbrellis-0.1.0-linux-x64.tar.gz');
+const output = path.join(distDirectory, `arbrellis-${version}-linux-x64.tar.gz`);
 
 if (!fs.existsSync(path.join(unpackedDirectory, 'arbrellis'))) {
   console.error('The unpacked Linux application is missing. Run electron-builder first.');
@@ -23,7 +24,7 @@ const result = spawnSync(
   [
     '-C', distDirectory,
     '--use-compress-program=gzip -1',
-    '--transform', 's,^linux-unpacked,Arbrellis-0.1.0,',
+    '--transform', `s,^linux-unpacked,Arbrellis-${version},`,
     '-cf', output,
     'linux-unpacked',
   ],

@@ -15,7 +15,7 @@
     "build:server": "node scripts/build-server.cjs",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "dist:linux": "electron-builder --linux AppImage && node scripts/archive-linux.cjs",
+    "dist:linux": "electron-builder --linux AppImage deb --publish never && node scripts/archive-linux.cjs && node scripts/checksums.cjs",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win"
   },
@@ -41,10 +41,16 @@
       }
     ],
     "linux": {
-      "target": ["AppImage"],
+      "target": ["AppImage", "deb"],
       "category": "Office",
       "icon": "assets/icon.png",
-      "syncDesktopName": true
+      "syncDesktopName": true,
+      "maintainer": "ad-st <ad-st@users.noreply.github.com>"
+    },
+    "deb": {
+      "packageCategory": "utils",
+      "priority": "optional",
+      "compression": "gz"
     },
     "mac": {
       "target": ["dmg", "zip"],

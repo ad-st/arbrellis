@@ -4889,7 +4889,10 @@
       if (!graph.nodes.length) document.body.insertAdjacentHTML('beforeend', '<div class="empty">No stored passages yet.</div>');
       else render();
       const initialLoads = [loadFacts(), loadDocuments(), loadAgentPlugins(), loadChats()];
-      Promise.all(initialLoads).then(runPerformanceAutoplay)
+      Promise.all(initialLoads).then(async () => {
+        window.__ARBRELLIS_READY__ = true;
+        await runPerformanceAutoplay();
+      })
         .catch(error => console.warn('Could not load initial workspace data:', error));
       loadHistoryStatus();
     }).catch(error => {

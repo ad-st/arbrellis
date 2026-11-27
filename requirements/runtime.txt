@@ -3,4 +3,4 @@ fastembed==0.7.4
 numpy==2.5.5
 sentencepiece==0.2.3
 torch==2.15.0+cpu
-transformers==5.23.0
+transformers==5.24.0

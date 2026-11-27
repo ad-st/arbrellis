@@ -49,3 +49,24 @@ test('opens and cancels the add-fact dialog without invoking models', async ({ p
   await page.keyboard.press('Escape');
   await expect(page.locator('#fact-dialog')).toBeHidden();
 });
+
+test('keeps empty graph gestures available beneath the empty-state message', async ({ page }) => {
+  await page.route('**/api/graph', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      nodes: [], edges: [], neighbours: 2, baseline: 0,
+      cache: { mode: 'full', pairs: 0 },
+    }),
+  }));
+  await openWorkspace(page);
+  await expect(page.locator('.empty')).toHaveText('No stored passages yet.');
+
+  await page.locator('[data-entity="facts"]').click();
+  await expect(page.locator('#entity-panel')).toBeVisible();
+  await page.locator('#graph').click({ button: 'right', position: { x: 500, y: 400 } });
+  await expect(page.locator('#entity-panel')).toBeHidden();
+
+  await page.locator('#graph').dblclick({ position: { x: 500, y: 400 } });
+  await expect(page.locator('#fact-dialog')).toBeVisible();
+});

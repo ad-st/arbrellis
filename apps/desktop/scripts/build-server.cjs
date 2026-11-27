@@ -18,12 +18,8 @@ const pythonCandidates = [
     ? path.join(projectRoot, '.venv', 'Scripts', 'python.exe')
     : path.join(projectRoot, '.venv', 'bin', 'python'),
 ].filter(Boolean);
-const python = pythonCandidates.find(candidate => fs.existsSync(candidate));
-
-if (!python) {
-  console.error('Python was not found. Set ARBRELLIS_PYTHON to the project interpreter.');
-  process.exit(1);
-}
+const python = pythonCandidates.find(candidate => fs.existsSync(candidate))
+  || (process.platform === 'win32' ? 'python' : 'python3');
 
 const target = `${platformName}-${process.arch}`;
 const distPath = path.join(projectRoot, 'dist-server', target);

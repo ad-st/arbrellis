@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arbrellis capture</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      background: #f5f3ee;
+      color: #252722;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header {
+      display: flex; align-items: center; gap: 16px; padding: 14px 20px;
+      background: #fff; border-bottom: 1px solid #d8d5cc; position: sticky; top: 0; z-index: 2;
+    }
+    header strong { margin-right: auto; }
+    input[type=file] { max-width: 280px; }
+    button {
+      border: 0; border-radius: 8px; padding: 9px 14px; font-weight: 650;
+      color: white; background: #335c4c; cursor: pointer;
+    }
+    button:disabled { background: #9caaa4; cursor: default; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: calc(100vh - 61px); }
+    .reader { padding: 28px clamp(24px, 6vw, 90px) 180px; }
+    .document-meta { color: #686b63; margin-bottom: 28px; }
+    #document { max-width: 820px; font-family: Georgia, serif; font-size: 18px; line-height: 1.7; }
+    #document h1, #document h2, #document h3, #document h4, #document h5, #document h6 {
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif; line-height: 1.25;
+      margin: 1.7em 0 .65em; color: #20241f;
+    }
+    #document h1 { margin-top: 0; font-size: 2rem; }
+    #document h2 { font-size: 1.55rem; border-bottom: 1px solid #ddd9cf; padding-bottom: .3em; }
+    #document h3 { font-size: 1.25rem; }
+    #document p { margin: 0 0 1.35em; }
+    #document ul, #document ol { margin: 0 0 1.35em; padding-left: 1.7em; }
+    #document li { margin: .25em 0; }
+    #document blockquote {
+      margin: 0 0 1.35em; padding: .2em 0 .2em 1.1em; border-left: 4px solid #a9b8ae;
+      color: #52584f;
+    }
+    #document pre {
+      margin: 0 0 1.5em; padding: 16px 18px; overflow-x: auto; border: 1px solid #d5d8d2;
+      border-radius: 9px; background: #242923; color: #edf2eb; font: 14px/1.55 ui-monospace, monospace;
+    }
+    #document code { font: .88em ui-monospace, monospace; }
+    #document :not(pre) > code { padding: .12em .35em; border-radius: 4px; background: #e8e7e1; }
+    .table-scroll { overflow-x: auto; margin: 0 0 1.5em; }
+    #document table { width: 100%; border-collapse: collapse; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 1.45; }
+    #document th, #document td { padding: 9px 11px; border: 1px solid #d5d2c9; text-align: left; vertical-align: top; }
+    #document th { background: #e9eee9; color: #274438; }
+    #document tbody tr:nth-child(even) { background: rgba(255,255,255,.52); }
+    #document a { color: #275b89; text-decoration-thickness: 1px; }
+    #document ::selection { background: #f4d978; color: #191a17; }
+    aside { border-left: 1px solid #d8d5cc; background: #fbfaf7; padding: 22px; overflow-y: auto; }
+    aside h2 { margin: 0 0 16px; font-size: 16px; }
+    .capture { padding: 12px 0; border-top: 1px solid #e2dfd7; }
+    .capture:first-of-type { border-top: 0; }
+    .capture strong { display: block; color: #244d3e; }
+    .capture small { display: block; color: #74776f; margin: 3px 0 6px; }
+    .capture p { margin: 0; font-size: 13px; line-height: 1.45; }
+    .nearest { margin-top: 8px; color: #5b5f57; font-size: 12px; }
+    .selection-bar {
+      position: fixed; left: 24px; right: 384px; bottom: 20px; z-index: 3;
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px;
+      padding: 14px 16px; border: 1px solid #cbc7bc; border-radius: 12px;
+      background: rgba(255,255,255,.96); box-shadow: 0 12px 32px rgba(33,35,30,.14);
+    }
+    #selection-preview { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #555950; }
+    #status { font-size: 12px; color: #656961; margin-top: 8px; min-height: 18px; }
+    @media (max-width: 850px) {
+      main { grid-template-columns: 1fr; }
+      aside { border-left: 0; border-top: 1px solid #d8d5cc; }
+      .selection-bar { right: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Local knowledge capture</strong>
+    <input id="file" type="file" accept=".txt,.md,.markdown,text/plain,text/markdown">
+    <button id="sample" type="button">Load sample</button>
+  </header>
+  <main>
+    <section class="reader">
+      <div class="document-meta">
+        <strong id="source-name">Sample document</strong>
+        <div id="status">Select text in the document to capture it.</div>
+      </div>
+      <article id="document"></article>
+    </section>
+    <aside>
+      <h2>Saved knowledge</h2>
+      <div id="captures">Nothing captured yet.</div>
+    </aside>
+  </main>
+  <div class="selection-bar">
+    <div id="selection-preview">No text selected</div>
+    <button id="capture" type="button" disabled>Add to knowledge</button>
+  </div>
+
+  <script>
+    const sampleText = `Attention allows a language model to decide which earlier tokens matter most for the current token. Multi-head attention performs several such comparisons in parallel, allowing different heads to represent different relationships.
+
+Model quantization stores weights with lower numerical precision, such as eight-bit or four-bit integers. This reduces memory requirements and may improve local inference speed.
+
+Attention layers can also be quantized. This connects architectural decisions about information flow with deployment decisions about memory, speed, and numerical precision.
+
+Database transaction isolation is a separate concern. Serializable isolation prevents concurrent transactions from observing inconsistent intermediate states.`;
+
+    const documentElement = document.querySelector('#document');
+    const fileElement = document.querySelector('#file');
+    const sourceElement = document.querySelector('#source-name');
+    const previewElement = document.querySelector('#selection-preview');
+    const captureButton = document.querySelector('#capture');
+    const statusElement = document.querySelector('#status');
+    const capturesElement = document.querySelector('#captures');
+    let currentSelection = null;
+    let currentDocumentId = null;
+
+    async function storeDocument(text, source) {
+      const response = await fetch('/api/documents', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: source, content: text}),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Could not store document');
+      currentDocumentId = payload.document.id;
+      renderDocument(text, source);
+      return payload.document;
+    }
+
+    function appendInlineMarkdown(parent, markdown) {
+      // Intentionally small and safe: this renders common inline Markdown without
+      // ever interpreting document text as HTML.
+      const tokenPattern = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_([^_]+)_|\[[^\]]+\]\([^\s)]+\))/g;
+      let cursor = 0;
+      for (const match of markdown.matchAll(tokenPattern)) {
+        parent.append(document.createTextNode(markdown.slice(cursor, match.index)));
+        const token = match[0];
+        let element;
+        if (token.startsWith('`')) {
+          element = document.createElement('code');
+          element.textContent = token.slice(1, -1);
+        } else if (token.startsWith('**') || token.startsWith('__')) {
+          element = document.createElement('strong');
+          element.textContent = token.slice(2, -2);
+        } else if (token.startsWith('[')) {
+          const parts = token.match(/^\[([^\]]+)\]\(([^\s)]+)\)$/);
+          element = document.createElement('a');
+          element.textContent = parts[1];
+          element.href = parts[2];
+          element.rel = 'noreferrer';
+        } else {
+          element = document.createElement('em');
+          element.textContent = token.slice(1, -1);
+        }
+        parent.appendChild(element);
+        cursor = match.index + token.length;
+      }
+      parent.append(document.createTextNode(markdown.slice(cursor)));
+    }
+
+    function splitTableRow(line) {
+      return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+    }
+
+    function isTableDivider(line) {
+      const cells = splitTableRow(line);
+      return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell));
+    }
+
+    function addDocumentBlock(element, context) {
+      element.classList.add('document-block');
+      element.dataset.context = context.trim();
+      return element;
+    }
+
+    function renderDocument(text, source) {
+      documentElement.replaceChildren();
+      sourceElement.textContent = source;
+      const lines = text.replace(/\r\n?/g, '\n').split('\n');
+      let index = 0;
+      while (index < lines.length) {
+        const line = lines[index];
+        if (!line.trim()) { index += 1; continue; }
+
+        const fence = line.match(/^\s*```\s*([^\s`]*)/);
+        if (fence) {
+          const codeLines = [];
+          index += 1;
+          while (index < lines.length && !/^\s*```/.test(lines[index])) codeLines.push(lines[index++]);
+          if (index < lines.length) index += 1;
+          const pre = addDocumentBlock(document.createElement('pre'), codeLines.join('\n'));
+          const code = document.createElement('code');
+          if (fence[1]) code.dataset.language = fence[1];
+          code.textContent = codeLines.join('\n');
+          pre.appendChild(code);
+          documentElement.appendChild(pre);
+          continue;
+        }
+
+        const heading = line.match(/^\s*(#{1,6})\s+(.+?)\s*#*$/);
+        if (heading) {
+          const element = addDocumentBlock(document.createElement(`h${heading[1].length}`), heading[2]);
+          appendInlineMarkdown(element, heading[2]);
+          documentElement.appendChild(element);
+          index += 1;
+          continue;
+        }
+
+        if (index + 1 < lines.length && line.includes('|') && isTableDivider(lines[index + 1])) {
+          const headers = splitTableRow(line);
+          const rows = [];
+          index += 2;
+          while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
+            rows.push(splitTableRow(lines[index++]));
+          }
+          const wrapper = document.createElement('div');
+          wrapper.className = 'table-scroll';
+          const table = document.createElement('table');
+          const thead = document.createElement('thead');
+          const headRow = addDocumentBlock(document.createElement('tr'), headers.join(': '));
+          for (const header of headers) {
+            const cell = document.createElement('th');
+            appendInlineMarkdown(cell, header);
+            headRow.appendChild(cell);
+          }
+          thead.appendChild(headRow);
+          table.appendChild(thead);
+          const tbody = document.createElement('tbody');
+          for (const values of rows) {
+            const context = headers.map((header, cellIndex) => `${header}: ${values[cellIndex] || ''}`).join('; ');
+            const row = addDocumentBlock(document.createElement('tr'), context);
+            for (let cellIndex = 0; cellIndex < headers.length; cellIndex += 1) {
+              const cell = document.createElement('td');
+              appendInlineMarkdown(cell, values[cellIndex] || '');
+              row.appendChild(cell);
+            }
+            tbody.appendChild(row);
+          }
+          table.appendChild(tbody);
+          wrapper.appendChild(table);
+          documentElement.appendChild(wrapper);
+          continue;
+        }
+
+        const listMatch = line.match(/^\s*(?:([-+*])|(\d+)\.)\s+(.+)$/);
+        if (listMatch) {
+          const ordered = Boolean(listMatch[2]);
+          const list = document.createElement(ordered ? 'ol' : 'ul');
+          while (index < lines.length) {
+            const itemMatch = lines[index].match(/^\s*(?:([-+*])|(\d+)\.)\s+(.+)$/);
+            if (!itemMatch || Boolean(itemMatch[2]) !== ordered) break;
+            const item = addDocumentBlock(document.createElement('li'), itemMatch[3]);
+            appendInlineMarkdown(item, itemMatch[3]);
+            list.appendChild(item);
+            index += 1;
+          }
+          documentElement.appendChild(list);
+          continue;
+        }
+
+        if (/^\s*>/.test(line)) {
+          const quoteLines = [];
+          while (index < lines.length && /^\s*>/.test(lines[index])) {
+            quoteLines.push(lines[index++].replace(/^\s*>\s?/, ''));
+          }
+          const quoteText = quoteLines.join(' ');
+          const quote = addDocumentBlock(document.createElement('blockquote'), quoteText);
+          appendInlineMarkdown(quote, quoteText);
+          documentElement.appendChild(quote);
+          continue;
+        }
+
+        const paragraphLines = [];
+        while (index < lines.length && lines[index].trim()) {
+          if (paragraphLines.length && (/^\s*```/.test(lines[index]) || /^\s*#{1,6}\s/.test(lines[index]))) break;
+          paragraphLines.push(lines[index++].trim());
+        }
+        const paragraphText = paragraphLines.join(' ');
+        const paragraph = addDocumentBlock(document.createElement('p'), paragraphText);
+        appendInlineMarkdown(paragraph, paragraphText);
+        documentElement.appendChild(paragraph);
+      }
+      clearSelection();
+    }
+
+    function clearSelection() {
+      currentSelection = null;
+      previewElement.textContent = 'No text selected';
+      captureButton.disabled = true;
+    }
+
+    function updateSelection() {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return clearSelection();
+      const range = selection.getRangeAt(0);
+      if (!documentElement.contains(range.commonAncestorContainer)) return clearSelection();
+      // A Range is always in document order, even when the user drags backward.
+      // Preserve meaningful line boundaries from code and tables while removing
+      // incidental spacing introduced by rendered HTML.
+      const highlight = selection.toString()
+        .split('\n')
+        .map(line => line.replace(/[ \t]+/g, ' ').trim())
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+      if (!highlight) return clearSelection();
+      const blocks = [...documentElement.querySelectorAll('.document-block')]
+        .filter(block => range.intersectsNode(block));
+      currentSelection = {
+        highlight,
+        context: blocks.map(block => block.dataset.context || block.textContent.trim()).join('\n\n'),
+        source: sourceElement.textContent,
+        document_id: currentDocumentId,
+      };
+      previewElement.textContent = highlight;
+      captureButton.disabled = false;
+    }
+
+    function captureCard(citation, nearest = []) {
+      const card = document.createElement('div');
+      card.className = 'capture';
+      const label = document.createElement('strong');
+      label.textContent = citation.label;
+      const meta = document.createElement('small');
+      meta.textContent = `#${citation.id} · ${citation.source}`;
+      const text = document.createElement('p');
+      text.textContent = citation.highlight;
+      card.append(label, meta, text);
+      if (nearest.length) {
+        const matches = document.createElement('div');
+        matches.className = 'nearest';
+        matches.textContent = `Nearest: ${nearest.map(item => `${item.label} (${item.similarity})`).join(', ')}`;
+        card.appendChild(matches);
+      }
+      return card;
+    }
+
+    async function refreshCaptures() {
+      const response = await fetch('/api/citations');
+      const payload = await response.json();
+      capturesElement.replaceChildren();
+      if (!payload.citations.length) {
+        capturesElement.textContent = 'Nothing captured yet.';
+        return;
+      }
+      for (const citation of payload.citations) capturesElement.appendChild(captureCard(citation));
+    }
+
+    captureButton.addEventListener('click', async () => {
+      if (!currentSelection) return;
+      captureButton.disabled = true;
+      statusElement.textContent = 'Creating embedding and label locally…';
+      try {
+        const response = await fetch('/api/citations', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(currentSelection)
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Capture failed');
+        if (!capturesElement.querySelector('.capture')) capturesElement.replaceChildren();
+        capturesElement.prepend(captureCard(payload.citation, payload.nearest));
+        statusElement.textContent = `Saved “${payload.citation.label}” locally.`;
+        window.getSelection()?.removeAllRanges();
+        clearSelection();
+      } catch (error) {
+        statusElement.textContent = error.message;
+        captureButton.disabled = false;
+      }
+    });
+    // Keep the document selection intact while the fixed action button is
+    // pressed. This also prevents a selectionchange from clearing the payload.
+    captureButton.addEventListener('mousedown', event => event.preventDefault());
+
+    fileElement.addEventListener('change', async () => {
+      const file = fileElement.files?.[0];
+      if (!file) return;
+      try {
+        await storeDocument(await file.text(), file.name);
+        statusElement.textContent = 'Document stored locally. Select text to capture it.';
+      } catch (error) {
+        statusElement.textContent = error.message;
+      }
+    });
+
+    document.querySelector('#sample').addEventListener('click', async () => {
+      try {
+        await storeDocument(sampleText, 'Sample document');
+        statusElement.textContent = 'Sample stored. Select text to capture it.';
+      } catch (error) {
+        statusElement.textContent = error.message;
+      }
+    });
+    // selectionchange covers forward and backward drags, keyboard selection,
+    // and pointer release just outside the article.
+    document.addEventListener('selectionchange', updateSelection);
+
+    storeDocument(sampleText, 'Sample document').catch(error => { statusElement.textContent = error.message; });
+    refreshCaptures().catch(error => { statusElement.textContent = error.message; });
+  </script>
+</body>
+</html>

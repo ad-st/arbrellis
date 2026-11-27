@@ -1,102 +1,100 @@
-# Arbrellis
+<p align="center">
+  <img src="./apps/desktop/assets/icon.png" width="128" alt="Arbrellis icon">
+</p>
 
-Arbrellis is a local-first personal knowledge workspace. Facts extracted from documents and working
-conversations become a spatial graph that remains under the user's control.
+<h1 align="center">Arbrellis</h1>
 
-> **Status:** early preview. Linux x86-64 is the first supported release target. macOS is next;
-> Windows remains experimental.
+<p align="center">
+  Turn the ideas you choose to remember into a private, visual knowledge graph.
+</p>
 
-## What stays local
+<p align="center">
+  <a href="https://github.com/ad-st/arbrellis/releases/latest">Download</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="./CONTRIBUTING.md">Contributing</a>
+</p>
 
-Documents, facts, annotations, graph positions, embeddings, and model inference remain on the local
-computer. Chat is an optional plugin: the Codex plugin sends only the conversation and working
-document context needed for the selected chat.
+> **Early preview:** Linux x86-64 is currently supported. macOS is planned; Windows remains
+> experimental. Keep backups of important data.
 
-## Local models
+## Why Arbrellis?
 
-The default pipeline uses Qwen3-0.6B for labels and BGE-large-en-v1.5 for embeddings. Model weights
-are downloaded on first use and require approximately 3 GB of additional disk space.
+Documents and AI chats contain more information than you want to keep. Arbrellis lets you select the
+small pieces that matter and shows how they relate to knowledge you saved earlier.
 
-T5Gemma is optional because its files require accepting Google's Gemma terms on Hugging Face. After
-accepting those terms and authenticating locally, enable it with:
+The graph is not a predefined topic tree and the application does not decide what you must learn. It
+grows from your own selections. Labels remain editable, nodes remain movable, and every graph item
+keeps a connection to its source.
 
-```sh
-ARBRELLIS_ENABLE_T5GEMMA=1 npm run dev
-```
+## How it works
 
-Without T5Gemma, labels and multi-fact captions continue to work using Qwen and BGE.
+1. **Capture** an idea directly, or highlight an exact passage in a Markdown or HTML document.
+2. **Integrate** it locally. Arbrellis creates a short label and an embedding for the complete fact.
+3. **Explore** the graph. Related facts move closer together while your manual node positions persist.
+4. **Refine** it. Rename labels to merge or split concepts, annotate source passages, and undo graph
+   integration without deleting the saved fact.
 
-## Development
+Facts sharing a label form a multi-fact concept. Opening it reveals the individual statements and
+their relationships, so repeated ideas do not become a row of duplicate nodes.
 
-Requirements: Node.js 22.12+, Python 3.12+, and an authenticated Codex CLI only when testing chat.
+## Features
 
-```sh
-python -m venv .venv
-.venv/bin/python -m pip install -r requirements/runtime.txt
-source .venv/bin/activate
-npm install
-npm run dev
-```
+- A full-window spatial graph built from your own knowledge
+- Standalone facts and exact, read-only document extracts
+- Persistent node and multi-fact layouts
+- Editable labels with user decisions taking precedence over generated ones
+- Document annotations that do not affect the graph
+- Document-focused graph views and source highlighting
+- Undo and redo for graph integration
+- Optional agent chat with a protected working document
 
-On Windows, activate `.venv\Scripts\python.exe` instead. Override interpreter discovery with
-`ARBRELLIS_PYTHON=/absolute/path/to/python`.
+## Private by default
 
-The first integration downloads Qwen3-0.6B and BGE-large-en-v1.5 into the user's model cache.
-No model weights or personal databases are stored in this repository.
+Facts, documents, annotations, graph positions, embeddings, and model inference stay on your
+computer. Arbrellis uses Qwen3-0.6B for short labels and BGE-large-en-v1.5 for semantic relationships.
+Their weights download when first needed and require approximately 3 GB of additional disk space.
+
+Chat is optional. The Codex chat plugin sends only the selected conversation and working-document
+context to its configured provider. Documents, facts, annotations, and the graph work without chat or
+a Codex account.
 
 ## Install on Linux
 
-Download a Linux package from the latest GitHub release:
+Download a package from the [latest release](https://github.com/ad-st/arbrellis/releases/latest):
 
-- `arbrellis_*_amd64.deb` integrates with Debian and Ubuntu package management.
-- `Arbrellis-*.AppImage` is the single-file application. Make it executable and run it.
-- `arbrellis-*-linux-x64.tar.gz` is a FUSE-free archive. Extract it and run `arbrellis`.
+- **AppImage:** download `Arbrellis-*.AppImage`, make it executable, and run it.
+- **Portable archive:** extract `arbrellis-*-linux-x64.tar.gz`, then run `arbrellis` inside the
+  extracted directory. This option does not require FUSE.
 
-Arbrellis currently targets x86-64 Linux. The application is an early preview, so keep backups of
-important knowledge databases.
+## Your first graph
 
-## Optional chat and T5Gemma
+1. Double-click empty graph space and enter a useful statement.
+2. Choose **Integrate** to generate its label and graph position.
+3. Open **Docs**, import a document, select a passage, and choose **Extract fact**.
+4. Click a node to inspect the source; click a multi-fact concept to see its individual facts.
 
-Chat requires a separately installed and authenticated Codex CLI. Arbrellis detects it at runtime;
-the rest of the application does not depend on it.
+The first integration may take longer while local models download. Later integrations reuse the
+local cache and run in the background.
 
-T5Gemma is not redistributed. To opt in, accept the model's Gemma terms on Hugging Face, authenticate
-on the machine running Arbrellis, and set `ARBRELLIS_ENABLE_T5GEMMA=1` before launching it. Qwen is
-used for both labels and fact captions when this option is off.
+## Optional integrations
 
-## Verification
+Agent chat requires a separately installed and authenticated Codex CLI. Arbrellis detects it at
+runtime; no chat setup is needed for its other features.
 
-```sh
-npm run check
-```
+T5Gemma may be enabled as an optional second label candidate after accepting Google's Gemma terms on
+Hugging Face. It is not distributed with Arbrellis, and the default Qwen and BGE pipeline remains
+fully functional without it.
 
-Run the deterministic browser UI suite explicitly during interface development:
+## Project status
 
-```sh
-npx playwright install chromium   # once per development machine
-npm run test:ui
-npm run test:ui:headed            # watch the interactions
-```
+Arbrellis is an early personal-knowledge experiment, not yet a stable data archive. The interface and
+storage format may change between preview releases. Please report reproducible problems through
+[GitHub Issues](https://github.com/ad-st/arbrellis/issues).
 
-UI tests use a disposable fixture database and do not download models or touch the user's Arbrellis
-data. Failed tests retain a screenshot, video, and Playwright trace under `test-results/`.
-
-## Linux package
-
-```sh
-.venv/bin/python -m pip install -r requirements/build.txt
-npm run build:server
-npm run dist:linux
-```
-
-The Linux build produces an AppImage, a Debian package, a FUSE-free archive, and `SHA256SUMS`.
-Tag-triggered releases are published only after a second clean GitHub runner verifies checksums,
-tests the frozen backend, installs the `.deb`, and opens the installed desktop under Xvfb. Running
-the release workflow manually performs the same build and smoke tests without publishing a release.
-
-Installers and frozen model runtimes are release artifacts and are never committed to Git.
+Development setup, testing, packaging, and release instructions live in
+[CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-Arbrellis source code is licensed under the [Apache License 2.0](LICENSE). Downloaded models retain
+Arbrellis source code is licensed under the [Apache License 2.0](./LICENSE). Downloaded models retain
 their own licenses and usage terms.

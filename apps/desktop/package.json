@@ -1,0 +1,57 @@
+{
+  "name": "arbrellis",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local-first visual workspace for personal knowledge",
+  "author": "ad-st",
+  "homepage": "https://github.com/ad-st/arbrellis",
+  "repository": "github:ad-st/arbrellis",
+  "license": "Apache-2.0",
+  "desktopName": "Arbrellis",
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "build:server": "node scripts/build-server.cjs",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:linux": "electron-builder --linux AppImage && node scripts/archive-linux.cjs",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "45.5.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "io.github.adst.arbrellis",
+    "productName": "Arbrellis",
+    "asar": true,
+    "files": [
+      "main.cjs",
+      "loading.html"
+    ],
+    "extraResources": [
+      {
+        "from": "../../dist-server/${os}-${arch}/arbrellis-server",
+        "to": "server",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Office",
+      "icon": "assets/icon.png",
+      "syncDesktopName": true
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    }
+  }
+}

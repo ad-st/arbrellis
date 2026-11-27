@@ -68,6 +68,11 @@ CREATE TABLE IF NOT EXISTS documents (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS document_annotations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     document_id INTEGER NOT NULL,
@@ -491,6 +496,21 @@ def _repair_recovered_documents(connection: sqlite3.Connection) -> None:
 class CaptureStore:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
+
+    def get_setting(self, key: str) -> str | None:
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT value FROM app_settings WHERE key = ?", (key,)
+            ).fetchone()
+        return str(row["value"]) if row is not None else None
+
+    def set_setting(self, key: str, value: str) -> None:
+        with connect(self.db_path) as connection:
+            connection.execute(
+                """INSERT INTO app_settings (key, value) VALUES (?, ?)
+                   ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+                (key, value),
+            )
 
     @staticmethod
     def _fact_with_segments(row: sqlite3.Row) -> dict:
@@ -2148,17 +2168,104 @@ class CaptureStore:
 
 class CaptureApplication:
     def __init__(self, db_path: Path) -> None:
-        self.models = LocalKnowledgeModels()
         self.store = CaptureStore(db_path)
+        saved_profile = self.store.get_setting("model_profile")
+        self.models = LocalKnowledgeModels(
+            t5_enabled=(saved_profile == "enhanced") if saved_profile else None
+        )
         agent_workspace = db_path.parent / "agent-workspace"
         agent_workspace.mkdir(parents=True, exist_ok=True)
         self.agent_plugins = AgentPluginRegistry([CodexAgentPlugin(agent_workspace)])
         self._capture_lock = threading.Lock()
         self._jobs_lock = threading.Lock()
         self._jobs: dict[str, dict[str, object]] = {}
+        self._model_setup_lock = threading.Lock()
+        self._model_setup_jobs: dict[str, dict[str, object]] = {}
         self._chat_jobs_lock = threading.Lock()
         self._chat_jobs: dict[str, dict[str, object]] = {}
         self._chat_job_by_thread: dict[str, str] = {}
+
+    def model_setup_status(self) -> dict[str, object]:
+        status = self.models.cache_status()
+        configured = self.store.get_setting("model_profile") in {"standard", "enhanced"}
+        status["configured"] = configured
+        status["ready"] = bool(status["ready"] and configured)
+        return status
+
+    def start_model_setup(self, payload: dict) -> dict[str, object]:
+        profile = str(payload.get("profile", "standard")).strip().lower()
+        if profile not in {"standard", "enhanced"}:
+            raise ValueError("Model profile must be standard or enhanced.")
+        cached = self.models.cache_status()
+        cached_models = cached.get("models", {})
+        t5_cached = bool(
+            isinstance(cached_models, dict)
+            and isinstance(cached_models.get("t5gemma"), dict)
+            and cached_models["t5gemma"].get("cached")
+        )
+        if profile == "enhanced" and not t5_cached:
+            access = self.models.check_t5_access()
+            if not access["available"]:
+                raise ValueError(str(access["message"]))
+        with self._model_setup_lock:
+            active = next(
+                (
+                    dict(job)
+                    for job in self._model_setup_jobs.values()
+                    if job["state"] in {"queued", "running"}
+                ),
+                None,
+            )
+            if active is not None:
+                return active
+            job_id = uuid.uuid4().hex
+            stages = {
+                "qwen": "queued",
+                "bge": "queued",
+                "t5gemma": "queued" if profile == "enhanced" else "disabled",
+            }
+            job: dict[str, object] = {
+                "id": job_id,
+                "profile": profile,
+                "state": "queued",
+                "stages": stages,
+                "error": None,
+            }
+            self._model_setup_jobs[job_id] = job
+
+        def update(stage: str, state: str) -> None:
+            with self._model_setup_lock:
+                stages = self._model_setup_jobs[job_id]["stages"]
+                assert isinstance(stages, dict)
+                stages[stage] = state
+
+        def work() -> None:
+            with self._model_setup_lock:
+                self._model_setup_jobs[job_id]["state"] = "running"
+            try:
+                self.models.prepare(profile == "enhanced", update)
+                self.store.set_setting("model_profile", profile)
+                with self._model_setup_lock:
+                    self._model_setup_jobs[job_id]["state"] = "complete"
+                    self._model_setup_jobs[job_id]["status"] = self.model_setup_status()
+            except Exception as error:
+                print(f"Model setup failed: {error!r}", flush=True)
+                with self._model_setup_lock:
+                    self._model_setup_jobs[job_id].update(
+                        state="failed", error=str(error)
+                    )
+
+        threading.Thread(
+            target=work, name=f"model-setup-{job_id[:8]}", daemon=True
+        ).start()
+        return dict(job)
+
+    def get_model_setup_job(self, job_id: str) -> dict[str, object]:
+        with self._model_setup_lock:
+            job = self._model_setup_jobs.get(job_id)
+            if job is None:
+                raise KeyError(job_id)
+            return dict(job)
 
     def list_agent_plugins(self) -> list[dict[str, object]]:
         return self.agent_plugins.list()
@@ -2989,6 +3096,14 @@ def make_handler(
                         "t5gemma_enabled": application.models.t5_enabled,
                     }
                 )
+            elif path == "/api/model-setup":
+                self.send_json(application.model_setup_status())
+            elif path.startswith("/api/model-setup/jobs/"):
+                job_id = path.removeprefix("/api/model-setup/jobs/")
+                try:
+                    self.send_json(application.get_model_setup_job(job_id))
+                except KeyError:
+                    self.send_json({"error": "Model setup job not found"}, HTTPStatus.NOT_FOUND)
             elif path == "/api/performance-samples":
                 with PERFORMANCE_SAMPLES_LOCK:
                     self.send_json({"samples": list(PERFORMANCE_SAMPLES)})
@@ -3023,6 +3138,27 @@ def make_handler(
                     self.send_json({"stored": True}, HTTPStatus.CREATED)
                 except (ValueError, json.JSONDecodeError) as error:
                     self.send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
+            if path == "/api/model-setup/t5-access":
+                self.send_json(application.models.check_t5_access())
+                return
+            if path == "/api/model-setup":
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if length <= 0 or length > 10_000:
+                        raise ValueError("Invalid request.")
+                    payload = json.loads(self.rfile.read(length))
+                    if not isinstance(payload, dict):
+                        raise ValueError("Request body must be a JSON object.")
+                    self.send_json(application.start_model_setup(payload), HTTPStatus.ACCEPTED)
+                except (ValueError, json.JSONDecodeError) as error:
+                    self.send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                except Exception as error:
+                    print(f"Model setup failed to start: {error!r}", flush=True)
+                    self.send_json(
+                        {"error": "Could not start local model setup."},
+                        HTTPStatus.INTERNAL_SERVER_ERROR,
+                    )
                 return
             if path == "/api/chats":
                 try:

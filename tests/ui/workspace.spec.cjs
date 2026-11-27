@@ -1,6 +1,16 @@
 const { test, expect } = require('@playwright/test');
 
-async function openWorkspace(page) {
+async function openWorkspace(page, modelSetupStatus = null) {
+  await page.route('**/api/model-setup', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(modelSetupStatus || {
+      profile: 'standard', ready: true, standard_ready: true, enhanced_ready: false,
+      models: {
+        qwen: { cached: true }, bge: { cached: true }, t5gemma: { cached: false },
+      },
+    }),
+  }));
   await page.goto('/');
   await page.waitForFunction(() => window.__ARBRELLIS_READY__ === true);
 }
@@ -50,13 +60,40 @@ test('opens and cancels the add-fact dialog without invoking models', async ({ p
   await expect(page.locator('#fact-dialog')).toBeHidden();
 });
 
+test('explains model downloads before the first integration and preserves the fact', async ({ page }) => {
+  await openWorkspace(page, {
+    profile: 'standard', ready: false, standard_ready: false, enhanced_ready: false,
+    models: {
+      qwen: { cached: false }, bge: { cached: false }, t5gemma: { cached: false },
+    },
+  });
+  await expect(page.locator('#model-setup-dialog')).toBeVisible();
+  await page.locator('#model-setup-cancel').click();
+  await page.locator('#graph').dblclick({ position: { x: 60, y: 420 } });
+  await page.locator('#fact-text').fill('KV caching reuses earlier attention states.');
+  await page.locator('#fact-submit').click();
+
+  await expect(page.locator('#model-setup-dialog')).toBeVisible();
+  await expect(page.locator('#model-setup-dialog')).toContainText('About 3 GB');
+  await page.locator('#model-setup-cancel').click();
+  await expect(page.locator('#fact-dialog')).toBeVisible();
+  await expect(page.locator('#fact-text')).toHaveValue('KV caching reuses earlier attention states.');
+});
+
 test('keeps empty graph gestures available beneath the empty-state message', async ({ page }) => {
+  let initialGraph = true;
   await page.route('**/api/graph', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({
+    body: JSON.stringify(initialGraph ? {
       nodes: [], edges: [], neighbours: 2, baseline: 0,
       cache: { mode: 'full', pairs: 0 },
+    } : {
+      nodes: [{
+        id: 99, label: 'first concept', facts: [{ id: 99 }], fact_edges: [],
+        fact_count: 1, density: 0, degree: 0, position: null,
+      }],
+      edges: [], neighbours: 2, baseline: 0, cache: { mode: 'full', pairs: 0 },
     }),
   }));
   await openWorkspace(page);
@@ -69,4 +106,10 @@ test('keeps empty graph gestures available beneath the empty-state message', asy
 
   await page.locator('#graph').dblclick({ position: { x: 500, y: 400 } });
   await expect(page.locator('#fact-dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  initialGraph = false;
+  await page.evaluate(() => refreshGraphFromServer());
+  await expect(page.locator('.empty')).toHaveCount(0);
+  await expect(page.locator('#nodes .node')).toHaveCount(1);
 });

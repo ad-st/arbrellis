@@ -1,0 +1,19 @@
+{
+  "url": "http://127.0.0.1:18767/",
+  "viewport": { "width": 800, "height": 500 },
+  "solidBackground": "#07100e",
+  "showClicks": true,
+  "clickColor": "#f1bd74",
+  "initialWaitMs": 2000,
+  "popupDelayMs": 1000,
+  "characterDelayMs": 20,
+  "wordPauseMs": 75,
+  "afterTypingPauseMs": 2000,
+  "afterIntegratePauseMs": 500,
+  "modelFlashMs": 500,
+  "newNodeSettleMs": 800,
+  "newNodeOffsetY": 60,
+  "graphAnimationMs": 3000,
+  "finalWaitMs": 5000,
+  "passage": "PagedAttention stores the KV cache in noncontiguous memory blocks, reducing fragmentation and allowing inference servers to batch more requests on the same GPU."
+}

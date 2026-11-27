@@ -52,8 +52,10 @@ Open the [latest release](https://github.com/ad-st/arbrellis/releases/latest) an
 - **Portable archive** — extract `arbrellis-*-linux-x64.tar.gz` and run `arbrellis`. Use this when
   AppImage/FUSE is unavailable.
 
-The first fact you integrate downloads the local language models (about 3 GB). Later facts reuse
-that local cache.
+On first launch, Arbrellis explains which local models it needs before anything is downloaded. The
+recommended Standard setup uses Qwen and BGE (about 3 GB); later facts reuse that local cache. An
+optional Enhanced setup adds T5Gemma captions and guides you through its separate Hugging Face
+access requirement. You can cancel setup and browse first; integrating a fact will reopen it.
 
 ## See how your ideas connect
 

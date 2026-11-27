@@ -158,6 +158,26 @@ function graphUrl() {
   return target.toString();
 }
 
+async function reportSmokeReadiness(window) {
+  const readyFile = process.env.ARBRELLIS_SMOKE_READY_FILE;
+  if (!readyFile) return;
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (window.isDestroyed()) throw new Error('The window closed before the UI became ready.');
+    const ready = await window.webContents.executeJavaScript(
+      'Boolean(window.__ARBRELLIS_READY__)',
+      true,
+    );
+    if (ready) {
+      fs.writeFileSync(readyFile, JSON.stringify({ ready: true, origin: serverOrigin }));
+      if (process.env.ARBRELLIS_SMOKE_AUTO_QUIT === '1') app.quit();
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  throw new Error('The graph UI did not become ready during the smoke test.');
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -202,7 +222,10 @@ async function startApplication() {
   const window = createWindow();
   try {
     await ensureServer();
-    if (!window.isDestroyed()) await window.loadURL(graphUrl());
+    if (!window.isDestroyed()) {
+      await window.loadURL(graphUrl());
+      await reportSmokeReadiness(window);
+    }
   } catch (error) {
     console.error(error);
     if (!window.isDestroyed()) window.destroy();

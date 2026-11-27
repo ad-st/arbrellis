@@ -33,6 +33,7 @@ Requirements: Node.js 22.12+, Python 3.12+, and an authenticated Codex CLI only 
 ```sh
 python -m venv .venv
 .venv/bin/python -m pip install -r requirements/runtime.txt
+source .venv/bin/activate
 npm install
 npm run dev
 ```
@@ -45,8 +46,9 @@ No model weights or personal databases are stored in this repository.
 
 ## Install on Linux
 
-Download either Linux asset from the latest GitHub release:
+Download a Linux package from the latest GitHub release:
 
+- `arbrellis_*_amd64.deb` integrates with Debian and Ubuntu package management.
 - `Arbrellis-*.AppImage` is the single-file application. Make it executable and run it.
 - `arbrellis-*-linux-x64.tar.gz` is a FUSE-free archive. Extract it and run `arbrellis`.
 
@@ -68,6 +70,17 @@ used for both labels and fact captions when this option is off.
 npm run check
 ```
 
+Run the deterministic browser UI suite explicitly during interface development:
+
+```sh
+npx playwright install chromium   # once per development machine
+npm run test:ui
+npm run test:ui:headed            # watch the interactions
+```
+
+UI tests use a disposable fixture database and do not download models or touch the user's Arbrellis
+data. Failed tests retain a screenshot, video, and Playwright trace under `test-results/`.
+
 ## Linux package
 
 ```sh
@@ -75,6 +88,11 @@ npm run check
 npm run build:server
 npm run dist:linux
 ```
+
+The Linux build produces an AppImage, a Debian package, a FUSE-free archive, and `SHA256SUMS`.
+Tag-triggered releases are published only after a second clean GitHub runner verifies checksums,
+tests the frozen backend, installs the `.deb`, and opens the installed desktop under Xvfb. Running
+the release workflow manually performs the same build and smoke tests without publishing a release.
 
 Installers and frozen model runtimes are release artifacts and are never committed to Git.
 

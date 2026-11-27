@@ -11,7 +11,10 @@
   "scripts": {
     "dev": "npm --workspace apps/desktop run dev",
     "test": "python -m unittest discover -s tests -v",
-    "check": "npm run test && node --check apps/desktop/main.cjs && node --check apps/desktop/scripts/build-server.cjs && node --check apps/desktop/scripts/archive-linux.cjs",
+    "check": "npm run test && python -m py_compile tests/smoke/*.py tests/ui/fixture_server.py && node --check apps/desktop/main.cjs && node --check apps/desktop/scripts/build-server.cjs && node --check apps/desktop/scripts/archive-linux.cjs && node --check apps/desktop/scripts/checksums.cjs",
+    "test:ui": "playwright test",
+    "test:ui:headed": "playwright test --headed",
+    "test:ui:update": "playwright test --update-snapshots",
     "build:server": "npm --workspace apps/desktop run build:server",
     "dist:linux": "npm --workspace apps/desktop run dist:linux",
     "dist:mac": "npm --workspace apps/desktop run dist:mac",
@@ -19,5 +22,8 @@
   },
   "dependencies": {
     "katex": "0.19.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1"
   }
 }

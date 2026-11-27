@@ -899,6 +899,26 @@
     button.primary { color: #092018; border-color: #7ee2b8; background: #7ee2b8; font-weight: 650; }
     button.primary:hover { background: #9becce; }
     button:disabled { opacity: .5; cursor: wait; }
+    .model-setup-dialog { width: min(680px, calc(100vw - 32px)); }
+    .model-setup-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+    .model-setup-option {
+      display: grid; grid-template-columns: auto 1fr; gap: 10px; padding: 13px;
+      border: 1px solid rgba(143, 190, 168, .22); border-radius: 12px; cursor: pointer;
+      background: rgba(255, 255, 255, .025);
+    }
+    .model-setup-option:has(input:checked) { border-color: #7ee2b8; background: rgba(126, 226, 184, .08); }
+    .model-setup-option strong { display: block; margin-bottom: 5px; font-size: 12px; }
+    .model-setup-option small { display: block; color: #789488; font-size: 10px; line-height: 1.5; }
+    .model-setup-details { padding: 12px; border-radius: 11px; background: rgba(0, 0, 0, .2); }
+    .model-setup-details code { color: #b7ead5; user-select: text; }
+    .model-setup-details a { color: #7ee2b8; }
+    .model-setup-access { display: flex; align-items: center; gap: 9px; margin-top: 10px; }
+    .model-setup-progress { display: grid; gap: 7px; margin-top: 14px; }
+    .model-setup-stage { display: grid; grid-template-columns: 1fr auto; padding: 9px 11px; border-radius: 9px; background: rgba(255,255,255,.035); font-size: 10px; }
+    .model-setup-stage [data-state="running"] { color: #7ee2b8; }
+    .model-setup-stage [data-state="complete"] { color: #9becce; }
+    .model-setup-stage [data-state="failed"] { color: #ef9d91; }
+    @media (max-width: 600px) { .model-setup-options { grid-template-columns: 1fr; } }
     .empty, .error {
       position: fixed; inset: 0; display: grid; place-items: center;
       color: #91aa9e; font-size: 14px;
@@ -1019,6 +1039,39 @@
       </div>
     </form>
   </dialog>
+  <dialog id="model-setup-dialog" class="fact-dialog model-setup-dialog">
+    <form id="model-setup-form" class="fact-form">
+      <h2>Prepare local models</h2>
+      <p>Arbrellis runs analysis privately on this computer. Before the first integration it needs to download and prepare the selected models once.</p>
+      <div class="model-setup-options">
+        <label class="model-setup-option">
+          <input type="radio" name="model-profile" value="standard" checked>
+          <span><strong>Standard · recommended</strong><small>Qwen + BGE. About 3 GB of model data. No account required.</small></span>
+        </label>
+        <label class="model-setup-option">
+          <input type="radio" name="model-profile" value="enhanced">
+          <span><strong>Enhanced captions</strong><small>Standard models plus T5Gemma. Requires separate Hugging Face access and more disk space.</small></span>
+        </label>
+      </div>
+      <div id="model-setup-t5" class="model-setup-details" hidden>
+        <div id="model-setup-t5-cached" hidden>T5Gemma weights are already available locally; no login or download is needed.</div>
+        <div id="model-setup-t5-instructions">
+          T5Gemma is gated. First <a href="https://huggingface.co/google/t5gemma-b-b-prefixlm-it" target="_blank" rel="noreferrer">accept its terms on Hugging Face</a>, then run <code>hf auth login</code> in a terminal.
+          <div class="model-setup-access"><button id="model-setup-check" type="button">Check access</button><span id="model-setup-access-status" class="fact-status"></span></div>
+        </div>
+      </div>
+      <div id="model-setup-progress" class="model-setup-progress" hidden>
+        <div class="model-setup-stage"><span>Qwen · concept labels</span><span data-setup-stage="qwen">Waiting</span></div>
+        <div class="model-setup-stage"><span>BGE · semantic vectors</span><span data-setup-stage="bge">Waiting</span></div>
+        <div class="model-setup-stage"><span>T5Gemma · optional captions</span><span data-setup-stage="t5gemma">Optional</span></div>
+      </div>
+      <div id="model-setup-status" class="fact-status" role="status" aria-live="polite"></div>
+      <div class="fact-actions">
+        <button id="model-setup-cancel" type="button">Cancel</button>
+        <button id="model-setup-submit" class="primary" type="submit">Download standard models</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="annotation-dialog" class="fact-dialog">
     <form id="annotation-form" class="fact-form">
       <h2 id="annotation-title">Add annotation</h2>
@@ -1064,6 +1117,16 @@
     const factText = document.querySelector('#fact-text');
     const factStatus = document.querySelector('#fact-status');
     const factStoreButton = document.querySelector('#fact-store');
+    const modelSetupDialog = document.querySelector('#model-setup-dialog');
+    const modelSetupForm = document.querySelector('#model-setup-form');
+    const modelSetupT5 = document.querySelector('#model-setup-t5');
+    const modelSetupT5Cached = document.querySelector('#model-setup-t5-cached');
+    const modelSetupT5Instructions = document.querySelector('#model-setup-t5-instructions');
+    const modelSetupProgress = document.querySelector('#model-setup-progress');
+    const modelSetupStatus = document.querySelector('#model-setup-status');
+    const modelSetupAccessStatus = document.querySelector('#model-setup-access-status');
+    const modelSetupSubmit = document.querySelector('#model-setup-submit');
+    const modelSetupCancel = document.querySelector('#model-setup-cancel');
     const labelDialog = document.querySelector('#label-dialog');
     const labelForm = document.querySelector('#label-form');
     const labelText = document.querySelector('#label-text');
@@ -1103,6 +1166,8 @@
     let hoveredDocumentFactId = null, documentLinkFrame = null, conceptViewAnimationFrame = null;
     let hoveredAnnotationId = null, editingAnnotationId = null, annotationSelection = null, annotationSourceKind = null;
     let performanceProbe = null;
+    let pendingModelAction = null, pendingModelCancel = null, modelSetupRunning = false;
+    let modelSetupCacheStatus = null;
 
     function performanceMarker(name) {
       if (performanceProbe) performanceProbe.markers.push({ name, at: performance.now() - performanceProbe.started });
@@ -2042,6 +2107,130 @@
       factStatus.textContent = '';
       factDialog.showModal();
       requestAnimationFrame(() => factText.focus());
+    }
+
+    const setupStateLabels = {
+      queued: 'Waiting', running: 'Preparing…', complete: 'Ready',
+      disabled: 'Not selected', failed: 'Failed',
+    };
+
+    function updateModelSetupChoice() {
+      const profile = modelSetupForm.elements['model-profile'].value;
+      modelSetupT5.hidden = profile !== 'enhanced';
+      const t5Cached = Boolean(modelSetupCacheStatus?.models?.t5gemma?.cached);
+      modelSetupT5Cached.hidden = !t5Cached;
+      modelSetupT5Instructions.hidden = t5Cached;
+      const cached = profile === 'enhanced'
+        ? modelSetupCacheStatus?.enhanced_ready : modelSetupCacheStatus?.standard_ready;
+      modelSetupSubmit.textContent = `${cached ? 'Use' : 'Download'} ${profile} models`;
+    }
+
+    function updateModelSetupStages(stages = {}) {
+      for (const element of document.querySelectorAll('[data-setup-stage]')) {
+        const state = stages[element.dataset.setupStage] || 'queued';
+        element.textContent = setupStateLabels[state] || state;
+        element.dataset.state = state;
+      }
+    }
+
+    function closeModelSetup({ cancelled = true } = {}) {
+      if (modelSetupRunning) return;
+      if (modelSetupDialog.open) modelSetupDialog.close();
+      if (cancelled && pendingModelCancel) pendingModelCancel();
+      if (cancelled) pendingModelAction = null;
+      pendingModelCancel = null;
+      modelSetupStatus.textContent = '';
+      modelSetupStatus.classList.remove('error-text');
+      modelSetupAccessStatus.textContent = '';
+      modelSetupProgress.hidden = true;
+    }
+
+    async function ensureModelsReady(action, onCancel = null) {
+      try {
+        const response = await fetch('/api/model-setup');
+        const status = await response.json();
+        if (!response.ok) throw new Error(status.error || `HTTP ${response.status}`);
+        if (status.ready) return true;
+        modelSetupCacheStatus = status;
+        pendingModelAction = action;
+        pendingModelCancel = onCancel;
+        const profile = status.profile === 'enhanced' ? 'enhanced' : 'standard';
+        modelSetupForm.elements['model-profile'].value = profile;
+        updateModelSetupChoice();
+        updateModelSetupStages(Object.fromEntries(
+          Object.entries(status.models || {}).map(([key, value]) => [key, value.cached ? 'complete' : (key === 't5gemma' && profile === 'standard' ? 'disabled' : 'queued')])
+        ));
+        modelSetupDialog.showModal();
+        return false;
+      } catch (error) {
+        if (onCancel) onCancel();
+        throw error;
+      }
+    }
+
+    async function checkT5Access() {
+      modelSetupAccessStatus.textContent = 'Checking…';
+      const response = await fetch('/api/model-setup/t5-access', { method: 'POST' });
+      const result = await response.json();
+      modelSetupAccessStatus.textContent = result.message || (response.ok ? 'Checked.' : 'Could not check access.');
+      modelSetupAccessStatus.classList.toggle('error-text', !result.available);
+      return Boolean(response.ok && result.available);
+    }
+
+    async function pollModelSetup(jobId) {
+      const response = await fetch(`/api/model-setup/jobs/${encodeURIComponent(jobId)}`);
+      const job = await response.json();
+      if (!response.ok) throw new Error(job.error || `HTTP ${response.status}`);
+      updateModelSetupStages(job.stages);
+      if (job.state === 'failed') throw new Error(job.error || 'Model setup failed.');
+      if (job.state !== 'complete') {
+        setTimeout(() => pollModelSetup(jobId).catch(failModelSetup), 500);
+        return;
+      }
+      modelSetupRunning = false;
+      modelSetupSubmit.disabled = false;
+      modelSetupCancel.disabled = false;
+      const action = pendingModelAction;
+      pendingModelAction = null;
+      pendingModelCancel = null;
+      modelSetupDialog.close();
+      if (action) await action();
+    }
+
+    function failModelSetup(error) {
+      modelSetupRunning = false;
+      modelSetupSubmit.disabled = false;
+      modelSetupCancel.disabled = false;
+      modelSetupStatus.textContent = error.message || String(error);
+      modelSetupStatus.classList.add('error-text');
+    }
+
+    async function beginModelSetup(event) {
+      event.preventDefault();
+      const profile = modelSetupForm.elements['model-profile'].value;
+      if (profile === 'enhanced'
+          && !modelSetupCacheStatus?.models?.t5gemma?.cached
+          && !await checkT5Access()) return;
+      modelSetupRunning = true;
+      modelSetupProgress.hidden = false;
+      modelSetupStatus.classList.remove('error-text');
+      const cached = profile === 'enhanced'
+        ? modelSetupCacheStatus?.enhanced_ready : modelSetupCacheStatus?.standard_ready;
+      modelSetupStatus.textContent = cached
+        ? 'Using the model weights already stored on this computer…'
+        : 'Models are prepared locally. This first setup can take several minutes.';
+      modelSetupSubmit.disabled = true;
+      modelSetupCancel.disabled = true;
+      updateModelSetupStages({ qwen: 'queued', bge: 'queued', t5gemma: profile === 'enhanced' ? 'queued' : 'disabled' });
+      try {
+        const response = await fetch('/api/model-setup', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profile }),
+        });
+        const job = await response.json();
+        if (!response.ok) throw new Error(job.error || `HTTP ${response.status}`);
+        pollModelSetup(job.id).catch(failModelSetup);
+      } catch (error) { failModelSetup(error); }
     }
 
     function openLabelDialog(citationIds, currentLabel, concept = false) {
@@ -3099,6 +3288,7 @@
 
     async function extractDocumentFact(status, selectionBar) {
       if (!documentSelection?.integration_highlight || !selectedDocument) return;
+      if (!await ensureModelsReady(() => extractDocumentFact(status, selectionBar))) return;
       const selection = { ...documentSelection };
       selectionBar.hidden = true;
       window.getSelection()?.removeAllRanges();
@@ -3378,6 +3568,7 @@
 
     async function extractChatFact(status, selectionBar) {
       if (!chatSelection?.integration_highlight || !selectedChat) return;
+      if (!await ensureModelsReady(() => extractChatFact(status, selectionBar))) return;
       const selection = { ...chatSelection };
       selectionBar.hidden = true; window.getSelection()?.removeAllRanges();
       status.textContent = 'Queued for local analysis…'; setIntegrationJobs(selection.integration_highlight);
@@ -3588,6 +3779,7 @@
       closeFocusedConcept({ restoreView: false });
       placeUpdatedGraph(next);
       graph = next;
+      syncEmptyState();
       selectedId = null;
       render();
       renderAccumulatedGrowth();
@@ -3689,6 +3881,9 @@
         status.textContent = 'Nothing to integrate.';
         return;
       }
+      if (!await ensureModelsReady(
+        () => updateFact(fact, editor, status, controls, rediscoverLabel)
+      )) return;
       controls.forEach(control => { control.disabled = true; });
       try {
         status.textContent = 'Saving draft…';
@@ -3828,6 +4023,20 @@
       }
     }
 
+    function syncEmptyState() {
+      let empty = document.querySelector('.empty');
+      if (graph?.nodes?.length) {
+        empty?.remove();
+        return;
+      }
+      if (!empty) {
+        empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'No stored passages yet.';
+        document.body.append(empty);
+      }
+    }
+
     function cancelGrowthAnimation() {
       accumulatedGrowth.targetIds.clear();
       accumulatedGrowth.addedEdgeKeys.clear();
@@ -3945,6 +4154,7 @@
 
       placeUpdatedGraph(next);
       graph = next;
+      syncEmptyState();
       selectedId = null;
       render();
       if (documentGraphFocus && selectedDocument) applyDocumentGraphFocus(selectedDocument, { fit: false });
@@ -3965,14 +4175,28 @@
       factStatus.textContent = '';
     }
 
-    function integrateFact(event) {
-      event.preventDefault();
-      const text = factText.value.trim();
-      if (!text) { factText.focus(); return; }
+    function beginSimpleFactIntegration(text) {
       setIntegrationJobs(text);
       factText.value = '';
       closeFactDialog();
       startIntegration(text);
+    }
+
+    async function integrateFact(event) {
+      event.preventDefault();
+      const text = factText.value.trim();
+      if (!text) { factText.focus(); return; }
+      closeFactDialog();
+      try {
+        if (await ensureModelsReady(
+          () => beginSimpleFactIntegration(text),
+          () => openFactDialog(),
+        )) beginSimpleFactIntegration(text);
+      } catch (error) {
+        openFactDialog();
+        factStatus.textContent = error.message;
+        factStatus.classList.add('error-text');
+      }
     }
 
     function drawEdge(edge) {
@@ -4690,6 +4914,12 @@
       if (event.propertyName === 'width') scheduleDocumentLinks();
     });
     document.addEventListener('contextmenu', event => {
+      if (modelSetupDialog.open) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeModelSetup();
+        return;
+      }
       if (annotationDialog.open) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -4740,6 +4970,10 @@
     });
     document.querySelector('#fact-cancel').addEventListener('click', closeFactDialog);
     factStoreButton.addEventListener('click', saveFactWithoutIntegration);
+    modelSetupForm.addEventListener('submit', beginModelSetup);
+    modelSetupForm.addEventListener('change', updateModelSetupChoice);
+    modelSetupCancel.addEventListener('click', () => closeModelSetup());
+    document.querySelector('#model-setup-check').addEventListener('click', checkT5Access);
     document.querySelector('#label-cancel').addEventListener('click', closeLabelDialog);
     labelForm.addEventListener('submit', renameLabels);
     document.querySelector('#annotation-cancel').addEventListener('click', closeAnnotationDialog);
@@ -4761,6 +4995,10 @@
     factDialog.addEventListener('cancel', event => {
       event.preventDefault();
       closeFactDialog();
+    });
+    modelSetupDialog.addEventListener('cancel', event => {
+      event.preventDefault();
+      closeModelSetup();
     });
     factForm.addEventListener('submit', integrateFact);
     factText.addEventListener('keydown', event => {
@@ -4798,7 +5036,10 @@
       }
       if (event.key !== 'Escape') return;
       cancelGrowthAnimation();
-      if (factDialog.open) {
+      if (modelSetupDialog.open) {
+        event.preventDefault();
+        closeModelSetup();
+      } else if (factDialog.open) {
         event.preventDefault();
         closeFactDialog();
       } else if (annotationDialog.open) {
@@ -4887,11 +5128,12 @@
       return response.json();
     }).then(data => {
       graph = data;
-      if (!graph.nodes.length) document.body.insertAdjacentHTML('beforeend', '<div class="empty">No stored passages yet.</div>');
-      else render();
+      syncEmptyState();
+      if (graph.nodes.length) render();
       const initialLoads = [loadFacts(), loadDocuments(), loadAgentPlugins(), loadChats()];
       Promise.all(initialLoads).then(async () => {
         window.__ARBRELLIS_READY__ = true;
+        await ensureModelsReady(async () => {});
         await runPerformanceAutoplay();
       })
         .catch(error => console.warn('Could not load initial workspace data:', error));

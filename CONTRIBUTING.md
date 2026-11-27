@@ -24,9 +24,10 @@ npm run dev
 On Windows, activate `.venv\Scripts\activate` instead. Set
 `ARBRELLIS_PYTHON=/absolute/path/to/python` to override interpreter discovery.
 
-Qwen3-0.6B and BGE-large-en-v1.5 download on the first integration. Model weights and personal
-databases do not belong in this repository. To test T5Gemma after accepting its Hugging Face terms
-and authenticating locally, launch with `ARBRELLIS_ENABLE_T5GEMMA=1`.
+The first integration opens the model-setup flow for Qwen3-0.6B and BGE-large-en-v1.5. Model weights
+and personal databases do not belong in this repository. To test the Enhanced profile, accept the
+T5Gemma terms on Hugging Face and authenticate with `hf auth login`. The
+`ARBRELLIS_ENABLE_T5GEMMA=1` environment variable remains available for development overrides.
 
 ## Verification
 

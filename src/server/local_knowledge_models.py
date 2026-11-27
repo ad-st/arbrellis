@@ -7,6 +7,7 @@ import os
 import re
 import threading
 import time
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Callable
 
@@ -81,6 +82,105 @@ class LocalKnowledgeModels:
         self._qwen_tokenizer = None
         self._qwen_model = None
         self._encoder: Encoder | None = None
+
+    @staticmethod
+    def _snapshot_path(model_name: str, revision: str) -> Path:
+        directory = f"models--{model_name.replace('/', '--')}"
+        return CACHE / "huggingface" / directory / "snapshots" / revision
+
+    @classmethod
+    def _huggingface_model_cached(cls, model_name: str, revision: str) -> bool:
+        snapshot = cls._snapshot_path(model_name, revision)
+        if not (snapshot / "config.json").is_file():
+            return False
+        return any(path.is_file() for path in snapshot.glob("*.safetensors")) or any(
+            path.is_file() for path in snapshot.glob("*.bin")
+        )
+
+    @staticmethod
+    def _bge_cached() -> bool:
+        if not CACHE.exists():
+            return False
+        return any(
+            path.is_file() and "bge-large-en-v1.5" in str(path).lower()
+            for path in CACHE.rglob("model.onnx")
+        )
+
+    def cache_status(self) -> dict[str, object]:
+        """Report installed weights without causing network access."""
+        qwen = self._qwen_model is not None or self._huggingface_model_cached(
+            QWEN_MODEL, QWEN_REVISION
+        )
+        bge = self._encoder is not None or self._bge_cached()
+        t5 = self._t5_model is not None or self._huggingface_model_cached(
+            T5_MODEL, T5_REVISION
+        )
+        standard_ready = qwen and bge
+        return {
+            "profile": "enhanced" if self.t5_enabled else "standard",
+            "standard_ready": standard_ready,
+            "ready": standard_ready and (not self.t5_enabled or t5),
+            "enhanced_ready": standard_ready and t5,
+            "models": {
+                "qwen": {"cached": qwen, "name": QWEN_MODEL},
+                "bge": {"cached": bge, "name": BGE_MODEL},
+                "t5gemma": {"cached": t5, "name": T5_MODEL},
+            },
+        }
+
+    def prepare(self, include_t5: bool, progress: ProgressCallback | None = None) -> None:
+        """Download/load the selected model profile before the first integration."""
+        with self._lock:
+            self.t5_enabled = include_t5
+            self.t5_error = None
+            if progress:
+                progress("qwen", "running")
+            self._load_qwen()
+            if progress:
+                progress("qwen", "complete")
+                progress("bge", "running")
+            self._load_encoder()
+            if progress:
+                progress("bge", "complete")
+            if include_t5:
+                if progress:
+                    progress("t5gemma", "running")
+                if not self._load_t5():
+                    raise RuntimeError(self.t5_error or "T5Gemma could not be loaded.")
+                if progress:
+                    progress("t5gemma", "complete")
+            elif progress:
+                progress("t5gemma", "disabled")
+
+    @staticmethod
+    def check_t5_access() -> dict[str, object]:
+        """Verify local Hugging Face credentials without exposing the token."""
+        try:
+            from huggingface_hub import HfApi, get_token
+
+            token = get_token()
+            if not token:
+                return {
+                    "available": False,
+                    "authenticated": False,
+                    "message": "No Hugging Face login was found. Run `hf auth login` first.",
+                }
+            HfApi(token=token).model_info(T5_MODEL, revision=T5_REVISION)
+            return {
+                "available": True,
+                "authenticated": True,
+                "message": "T5Gemma access is ready.",
+            }
+        except Exception as error:
+            return {
+                "available": False,
+                "authenticated": True,
+                "message": (
+                    "T5Gemma is still gated for this account. Accept its license on "
+                    "Hugging Face, then check again."
+                ),
+                "detail": type(error).__name__,
+            }
 
     def _load_encoder(self) -> None:
         if self._encoder is None:

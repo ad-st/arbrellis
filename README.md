@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ad-st/arbrellis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/ad-st/arbrellis?display_name=tag&sort=semver"></a>
+  <a href="https://github.com/ad-st/arbrellis/releases/latest"><img alt="Early preview release" src="https://img.shields.io/badge/release-early_preview-6adbb0"></a>
   <a href="./LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-FCC624?logo=linux&logoColor=black">
 </p>
@@ -39,6 +39,10 @@ map of an entire document.
 
 The graph is the workspace, not a decorative view added to a notes app. Move concepts where they
 make sense to you, open one to revisit its evidence, and rename concepts to merge or separate them.
+
+![Opening a multi-fact concept and returning to the knowledge graph](./docs/assets/graph-demo.gif)
+
+<p align="center"><em>Open a concept to see the individual facts behind it.</em></p>
 
 ## Install on Linux
 
@@ -64,6 +68,10 @@ that local cache.
 When several facts have the same label, Arbrellis groups them into one concept instead of filling
 the graph with duplicate nodes. Open that concept to explore its individual facts and their
 relationships.
+
+![Opening a source document and following extracted passages into the graph](./docs/assets/document-demo.gif)
+
+<p align="center"><em>Source passages remain connected to their concepts in the graph.</em></p>
 
 ## Built around your sources
 

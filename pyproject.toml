@@ -2,11 +2,11 @@
 name = "arbrellis"
 version = "0.1.0"
 description = "A local-first visual workspace for personal knowledge"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = "Apache-2.0"
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]

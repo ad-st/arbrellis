@@ -1,7 +1,7 @@
 {
   "name": "arbrellis-workspace",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local-first visual workspace for personal knowledge",
   "repository": "github:ad-st/arbrellis",
   "license": "Apache-2.0",
